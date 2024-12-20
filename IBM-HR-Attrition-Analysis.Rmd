@@ -1,0 +1,1374 @@
+---
+title: "IBM HR Analytics"
+output: html_notebook
+---
+*Attrition in an Organization: Why Workers Quit?*
+
+Employees are the backbone of the organization. organization's performance is heavily based on the quality of the employees. Challeges that an organization has to face due to employee attrition are:
+
+1. Expensive in terms of both money and time to new employees.
+2. Loss of experienced employees
+3. Impact on productivity
+4. Impact profit
+
+*Business Task*
+1. What factor contribute to employee attrition?
+2. What measures should the company take to retain their employees?
+3. What business value does the model bring?
+4. Will the model save a lot of money?
+5. Which business unit faces the attrition problem?
+
+```{r}
+# Install the tidyverse package (a collection of powerful data science tools)
+install.packages("tidyverse")
+
+# Install the dplyr package for data manipulation
+install.packages("dplyr")
+
+# Install the ggplot2 package for data visualization
+install.packages("ggplot2")
+
+# Install the readr package for efficient reading of data files
+install.packages("readr")
+
+# Install the caret package for machine learning models
+install.packages("caret")
+```
+```{r}
+install.packages("gridExtra")
+```
+
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(caret)
+```
+
+```{r}
+data <- read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+df <- data
+colnames(data)
+head(data)
+```
+
+*Exploratory data Analysis*
+* Find patterns in data through data visualization. Reveal hidden secrets of the data through graphs, analysis and charts.
+  + Univariate analysis
+    + Continous variables: Histograms, boxplots. Gives us an understanding about the central tendency and spread.
+    + Categorical variable: bar chart showing frequency in each category.
+  + Bivariate analysis
+    + Continous & Continous : Scatter plots to know how continous variables interact with each other
+    + Categorical & categorical : Stacked column chart to show how the frequencies are spread between two
+    + Categorical variables
+    + categorical and continuous: Boxplots, Swamplots or even bar charts
+* Detect outliers
+* Feature engineering
+
+*1. data Cleaning*
+```{r}
+# dimensions of the dataset
+nrow(data)
+ncol(data)
+```
+*Inference:*
+1. There are totally 1470 rows/records in the dataset.
+2. There are totally 35 columns/features in the dataset.
+
+*2. Basic Information of Attributes*
+```{r}
+str(data)
+```
+
+*Inference:*
+1. There are 9 categorical attributes in the dataset.
+2. There are 26 Numerical Attributes in the dataset.
+
+However, few of the numerical features are storing categorical data stored in umbers.
+So, for better analysis we will replace those numerical values with appropriate categorical values.
+```{r}
+# Replace numerical values with categorical labels
+data$Education <- factor(data$Education, levels = 1:5,
+                      labels = c("Below College", "College", "Bachelor", "Master", "Doctor"))
+
+data$EnvironmentSatisfaction <- factor(data$EnvironmentSatisfaction, levels = 1:4,
+                                      labels = c("Low", "Medium", "High", "Very High"))
+
+data$JobInvolvement <- factor(data$JobInvolvement, levels = 1:4,
+                            labels = c("Low", "Medium", "High", "Very High"))
+
+data$JobLevel <- factor(data$JobLevel, levels = 1:5,
+                      labels = c("Entry Level", "Junior Level", "Mid Level", "Senior Level", "Executive Level"))
+
+data$JobSatisfaction <- factor(data$JobSatisfaction, levels = 1:4,
+                             labels = c("Low", "Medium", "High", "Very High"))
+
+data$PerformanceRating <- factor(data$PerformanceRating, levels = 1:4,
+                               labels = c("Low", "Good", "Excellent", "Outstanding"))
+
+data$RelationshipSatisfaction <- factor(data$RelationshipSatisfaction, levels = 1:4,
+                                       labels = c("Low", "Medium", "High", "Very High"))
+
+data$WorkLifeBalance <- factor(data$WorkLifeBalance, levels = 1:4,
+                             labels = c("Bad", "Good", "Better", "Best"))
+```
+
+```{r}
+head(data)
+```
+*3. Checking for Duplicate Records*
+```{r}
+sum(duplicated(data))
+```
+*Inference:*
+Since the output is 0, there are no duplicate records present in the dataset.
+
+*4. Checking for Missing Values and the Percentage of Missing Values*
+```{r}
+# Calculate the number of missing values in each column
+missing_values <- colSums(is.na(data))
+
+# Create a data frame to store the results
+missing_data <- data.frame(
+  "Total No. of Missing Values" = missing_values,
+  "% of Missing Values" = round((missing_values / nrow(data)) * 100, 2)
+)
+
+# Print the data frame
+print(missing_data)
+```
+*Inference:*
+None of the attributes have missing values. Therefore, further analysis will be unbiased and consistent.
+
+*5. Descriptive Analysis of the Attributes*
+```{r}
+summary(data)
+```
+*Inference:*
+1. The minimum age is 18, which implies that all the employees are adults.
+2. EmployeeNumber attribute represents a unique value to each of the employees.
+
+*6. Drop Irrelevent Attributes*
+```{r}
+cols <-  c("Over18","EmployeeCount","EmployeeNumber","StandardHours")
+data <- data %>% 
+  select(-cols)
+```
+```{r}
+colnames(data)
+```
+We have successfully dropped "Over18", "EmployeeCount", EmployeeNumber", and "StandardHours".
+
+*7. Checking the Unique Values of the Categorical Attributes*
+```{r}
+library(dplyr)
+
+# Assuming 'data' is your data frame
+
+# Identify categorical columns
+categorical_cols <- sapply(data, is.character) | sapply(data, is.factor)
+
+# Iterate over categorical columns and print details
+for (col_name in names(data)[categorical_cols]) {
+  print(paste("Unique values of", col_name))
+  
+  if (is.factor(data[[col_name]])) {
+    print(levels(data[[col_name]]))
+  } else {
+    print(unique(data[[col_name]]))
+  }
+  cat("\n")
+}
+```
+*Inference:*
+1. The value set of the categorical attributes is complete and easy to understand.
+2. So we do not need to perform preprocessing steps for these attributes.
+
+*Exploratory data Analysis*
+*1. Visualizing the Employee Attrition Rate*
+```{r}
+# Visualization to show Employee Attrition in Counts
+# Get attrition counts
+attrition_rate <- data %>% count(Attrition)
+
+# Add value labels for bars (optional)
+attrition_bar <- ggplot(attrition_rate, aes(x = Attrition, y = n)) +
+  geom_bar(stat = "identity", fill = c("#1d7874", "#8B0000")) +
+  labs(title = "Employee Attrition Counts", x = "Attrition", y = "Count", 
+       fontweight = "bold", fontsize = 16) +  # Adjust font weight and size
+  theme_minimal() +
+  annotate("text", x = seq_along(attrition_rate$Attrition), 
+           y = attrition_rate$n + 0.1,  # Adjust label position
+           label = attrition_rate$n, vjust = 0.5, color = "black", size = 5)  # Adjust label properties
+
+# Create pie chart for percentage
+# Basic piechart
+attrition_pie <- ggplot(attrition_rate, aes(x = "", y = n, fill = Attrition)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title = "Employee Attrition Rate") +
+  theme_void() +
+  scale_fill_manual(values = c("#1d7874", "#8B0000")) +
+  geom_label(aes(label = paste0(round(n / sum(n) * 100), "%")), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+  
+
+# You can combine both plots using gridExtra package (optional)
+library(gridExtra)
+grid.arrange(attrition_bar, attrition_pie, ncol = 2)
+
+```
+*Inference:*
+1. The employee attrition rate of this organization is 16.12%.
+2. According to Rippling, a cloud-based software platform that helps businesses manage their workforce, HR, IT, and finance, a healthy attrition rate ranges from 10% to 15% yearly.
+3. According to the data, the attrition rate of this organization is at dangerous level.
+4. Therefore measures must be taken to reduce attrition rates.
+
+*2. Analyzing Employee Attrition by Gender*
+```{r}
+#Visualization to show Total Employees by Gender
+gender_dist <- data %>% count(Gender)
+
+#plot the gender distribution in a pie chart
+gender_dist_plot <- ggplot(gender_dist, aes(x="", y=n, fill=Gender)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title="Employee Distribution by Gender") +
+  theme_void() +
+  scale_fill_manual(values = c("#1d7874", "#8B0000")) +
+  geom_label(aes(label = paste0(round(n / sum(n) * 100), "%")), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# Calculate attrition counts
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+# Calculate gender counts for all employees and those who left
+gender_counts <- data %>% count(Gender)
+attrition_counts <- attrition_data %>% count(Gender)
+
+# Merge data frames
+merged_data <- data.frame(
+  Gender = gender_counts$Gender,
+  Total = gender_counts$n,
+  Left = attrition_counts$n,
+  Attrition_Rate = round((attrition_counts$n / gender_counts$n) * 100, 1)
+)
+
+# Create the bar chart
+attrition_gen <- ggplot(merged_data, aes(x = Gender, y = Left, fill = Gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Employee Attrition Rate by Gender", x = "Gender", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#1d7874", "#8B0000"))
+
+grid.arrange(gender_dist_plot, attrition_gen, ncol = 2)
+```
+*Inference:*
+1. The number of male employees in the organization accounts for a higher proportion than female employees by more than 20%.
+2. Male employees leave at a higher rate compared to the female employees.
+
+*3. Analyzing Employee Attrition by Age*
+```{r}
+# Visualization to show Employee Distribution by Age
+employee_dist_age <- ggplot(data, aes(x = Age, fill = Attrition)) +
+  geom_histogram(alpha = 0.7, position = "identity", bins = 5) +
+  labs(title = "Employee Distribution by Age", x = "Age", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#1d7874", "#8B0000"))
+
+# Visualization to show Employee Distribution by Age & Attrition
+employee_dist_attvsage <- ggplot(data = data, aes(x = Attrition, y = Age, fill = Attrition)) +
+  geom_boxplot() +
+  labs(title = "Employee Distribution by Age & Attrition", x = "Attrition", y = "Age") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#1d7874", "#8B0000")) +
+  guides(color = guide_legend(title = NULL))
+
+grid.arrange(employee_dist_age, employee_dist_attvsage, ncol = 2)
+```
+*Inference:*
+1. Most of the employees are between age 30 to 40.
+2. We can clearly observe that as the age is increasing, the attrition is decreasing.
+3. From the boxplot we can observe that the median age of employee who left the organization is less than the employees who are working in the organization.
+4. Younger employees leave the company more often compared to older employees.
+
+*4. Analyzing Employee Attrition by Business Travel*
+```{r}
+# Visualization to show Total Employees by Business Travel
+businesstravel_count <- data %>% count(BusinessTravel)
+businesstravel_count
+
+businesstravel_plot <- ggplot(businesstravel_count, aes(x="", y=n, fill=BusinessTravel)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title="Employees by Business Travel") +
+  theme_void() +
+  scale_fill_manual(values = c('#E84040', '#E96060', '#E88181')) +
+  geom_label(aes(label = paste0(round(n / sum(n) * 100), "%")), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# visualization to show Attrition by Business Travel
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+# Calculate business travel counts for all employees and those who left
+business_travel_counts <- data %>% count(BusinessTravel)
+attrition_by_travel <- attrition_data %>% count(BusinessTravel)
+
+# Merge data frames
+merged_data <- data.frame(
+  Travel_Frequency = business_travel_counts$BusinessTravel,
+  Total_Employees = business_travel_counts$n,
+  Left = attrition_by_travel$n,
+  Attrition_Rate = round((attrition_by_travel$n / business_travel_counts$n) * 100, 1)
+)
+
+# Create the bar chart
+attrition_business_travel <-  ggplot(merged_data, aes(x = Travel_Frequency, y = Left, fill = Travel_Frequency)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Attrition Rate by Business Travel", x = "Business Travel", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c('#E84040', '#E96060', '#E88181')) +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), x = merged_data$Travel_Frequency, 
+            vjust = -0.5, hjust = 0.5)
+
+
+grid.arrange(businesstravel_plot, attrition_business_travel,ncol=2)
+```
+*Inference:*
+1. 71% of the employees in the organization travel rarely.
+2. The highest attrition rate is observed among employees who travel frequently(24.9%).
+3. The lowest employee attrition rate can be observed among employees who don't travel(8%).
+
+*5. Analyzing Employee Attrition by Department*
+```{r}
+# Visualizing employees by department
+department_counts <- data %>% count(Department)
+
+department_dist <- ggplot(data = department_counts, aes(x=Department, y=n, fill=Department)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  scale_fill_manual(values = c('#E84040', '#E96060', '#E88181')) +
+  labs(title="Employee Distribution by Department", x="Department", y = "Count") +
+  geom_text(aes(label = paste0(n)), vjust = -0.5, hjust = 0.5)
+
+# Visualization to show Employee Attrition Rate by Department.
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+# Calculate department-wise counts
+department_counts <- data %>% count(Department)
+attrition_by_dept <- attrition_data %>% count(Department)
+
+# Merge data frames
+merged_data <- data.frame(
+  Department = department_counts$Department,
+  Total_Employees = department_counts$n,
+  Left = attrition_by_dept$n,
+  Attrition_Rate = round((attrition_by_dept$n / department_counts$n) * 100, 1)
+)
+
+# Create the bar chart
+department_att_plot <-  ggplot(merged_data, aes(x = Department, y = Left, fill = Department)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Attrition Rate by Department", x = "Department", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#11264e", "#6faea4", "#FEE08B")) +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), vjust = -0.5, hjust = 0.5)
+
+grid.arrange(department_dist, department_att_plot,ncol = 2)
+```
+*Inference:*
+1. Most of the employees are from Research and Development department.
+2. The highest attrition rate is observed in the Sales department.
+3. The attrition rate in the Human Resources is also very high.
+4. Although the attrition rate in the Research and Development department is very high, it is the least compared to other departments.
+
+*6. Analyzing Employee Attrition by Daily Rate*
+*Note*:
+1. *DailRate* shows the daily wages for the employees.
+2. To generate meaningful insights, we can cut the daily rates into three groups.
+
+```{r}
+# Creating salary groups
+data$DailyRateGroup <- cut(data$DailyRate, breaks = c(0, 500, 1000, 1500), 
+                    labels = c("Low DailyRate", "Average DailyRate", "High DailyRate"))
+head(data)
+```
+
+```{r}
+# Visualization to show Total Employees by DailyRate groups
+
+daily_rate_counts <- data %>% count(DailyRateGroup)
+
+# Create the pie chart
+dailyrate_dist <-  ggplot(daily_rate_counts, aes(x = "", y = n, fill = DailyRateGroup)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title = "Employees by DailyRateGroup") +
+  theme_void() +
+  scale_fill_manual(values = c("#FF8000", "#FF9933", "#FFB366")) +
+  geom_label(aes(label = paste0(n)), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# Visualization of Attrition by daily rate groups
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+# Calculate daily rate group counts for all employees and those who left
+daily_rate_counts <- data %>% count(DailyRateGroup)
+attrition_by_rate <- attrition_data %>% count(DailyRateGroup)
+
+# Merge data frames
+merged_data <- data.frame(
+  DailyRateGroup = daily_rate_counts$DailyRateGroup,
+  Total_Employees = daily_rate_counts$n,
+  Left = attrition_by_rate$n,
+  Attrition_Rate = round((attrition_by_rate$n / daily_rate_counts$n) * 100, 1)
+)
+
+# Create the bar chart
+dailyrate_att_dist <-  ggplot(merged_data, aes(x = DailyRateGroup, y = Left, fill = DailyRateGroup)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Employee Attrition Rate by DailyRateGroup", x = "Daily Rate Group", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#11264e", "#6faea4", "#FEE08B")) +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), vjust = -0.5, hjust = 0.5)
+
+grid.arrange(dailyrate_dist, dailyrate_att_dist, ncol=2)
+```
+*Inference:*
+1. Employees with Average Daily Rate and High Daily Rate are approximately equal.
+2. But the attrition rate is very high for employees with average DailyRate compared to the employees with High Daily Rate.
+3. The attrition rate is also very high among employees with low daily rate.
+
+*7. Analyzing Employee Attrition by Distance From Home*
+```{r}
+# Unique values in DistanceFromHome attribute
+unique_distances <- unique(data$DistanceFromHome)
+length(unique_distances)
+```
+```{r}
+# description of distance from home attribute
+distance_summary <- summary(data$DistanceFromHome)
+
+distance_summary
+```
+```{r}
+# Define the bins
+data$DistanceGroup <- cut(data$DistanceFromHome, breaks = c(0, 2, 5, 10, 30), labels = c('0-2 kms', '3-5 kms', '6-10 kms',"10+ kms"))
+```
+
+```{r}
+# Visualization to show total employees by distance from home
+distance_group_count <- data %>% count(DistanceGroup)
+
+distance_group_dist <- ggplot(data=distance_group_count, aes(x=DistanceGroup, y=n, fill=DistanceGroup)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#FFA07A", "#D4A1E7", "#FFC0CB","#87CEFA")) +
+  labs(title="Employees by Distance From Home", x="Distance From Home", y="Count") +
+  geom_text(aes(label = paste0(n)), vjust = -0.5, hjust = 0.5)
+
+#Visualization to show attrition rate by distance from home
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+# Calculate distance group counts for all employees and those who left
+distance_group_counts <- data %>% count(DistanceGroup)
+attrition_by_distance <- attrition_data %>% count(DistanceGroup)
+
+# Merge data frames
+merged_data <- data.frame(
+  DistanceGroup = distance_group_counts$DistanceGroup,
+  Total_Employees = distance_group_counts$n,
+  Left = attrition_by_distance$n,
+  Attrition_Rate = round((attrition_by_distance$n / distance_group_counts$n) * 100, 1)
+)
+
+# Create the bar chart
+att_by_distance_plot <-  ggplot(merged_data, aes(x = DistanceGroup, y = Left, fill = DistanceGroup)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Attrition Rate by Distance From Home", x = "Distance Group", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#11264e", "#6faea4", "#FEE08B", "#D4A1E7", "#E7A1A1")) +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), vjust = -0.5, hjust = 0.5)
+
+
+
+grid.arrange(distance_group_dist, att_by_distance_plot, ncol=2)
+```
+*Inference:*
+1.The organization has employees living in close proximity to the office and others commuting from farther distances.
+2. There isn't an observable trend in the attrition rates.
+3. The attrition rate is above 10% for all the distance groups.
+4. However, the employees staying further than 10kms away from the company are leaving the company at a higher rate(20.9).
+
+*8. Analyzing Employee Attrition by Education*
+```{r}
+# Visualization to show total employees by education
+education_count <- data %>% count(Education)
+
+education_dist <- ggplot(data=education_count, aes(x=Education, y=n, fill=Education)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title="Employees Distribution by Education", x="Education", y="Count") +
+  scale_fill_manual(values=c("#11264e", "#6faea4", "#FEE08B", "#D4A1E7", "#E7A1A1")) +
+  geom_text(aes(label = paste0(n)), vjust = -0.5, hjust = 0.5)
+
+# Visualization to show attrition by education
+education_att_count <- attrition_data %>% count(Education)
+
+# Merge data frames
+merged_data <- data.frame(
+  Education = education_count$Education,
+  Total_Employees = education_count$n,
+  Left = education_att_count$n,
+  Attrition_Rate = round((education_att_count$n / education_count$n) * 100, 1)
+)
+
+attrition_by_education <- ggplot(data=merged_data, aes(x=Education, y=Left, fill=Education)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Attrition Rate by Education", x = "Education", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#11264e", "#6faea4", "#FEE08B", "#D4A1E7", "#E7A1A1")) +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), vjust = -0.5, hjust = 0.5)
+
+grid.arrange(education_dist, attrition_by_education, ncol=2)
+```
+*Inference:*
+1. Most of the Employees in the organization have completed Bachelors Or Masters degrees as their education qualification.
+2. Very few employees in the organization have completed Docterate degrees as their education qualification.
+3. There is a decrease in attrition rates as the education qualification increases.
+
+*9. Analyzing Employee Attrition by Education Field*
+```{r}
+# Visualization showing total employees by education field
+education_field_count <- data %>% count(EducationField)
+
+education_field_dist <- ggplot(data=education_field_count, aes(x=EducationField, y=n, fill=EducationField)) +
+  geom_bar(stat="identity") +
+  theme_minimal()+
+  labs(title="Employees by Education Field", x="Education Field", y="Count") +
+  scale_fill_manual(values = c("#FFA07A", "#D4A1E7", "#FFC0CB","#87CEFA","#11264e", "#6faea4")) +
+  geom_text(aes(label=paste0(n)), vjust = -0.5, hjust = 0.5)
+
+# Visualization od attrition by education field
+education_field_att_count <- attrition_data %>% count(EducationField)
+
+merged_data <- data.frame(
+  EducationField = education_field_count$EducationField,
+  TotalEmployees = education_field_count$n,
+  Left = education_field_att_count$n,
+  Attrition_Rate = round((education_field_att_count$n / education_field_count$n) * 100, 1)
+)
+
+attrition_by_education_field <- ggplot(data=merged_data, aes(x=EducationField, y=Left, fill=EducationField)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#FFA07A", "#D4A1E7", "#FFC0CB","#87CEFA","#11264e", "#6faea4")) +
+  labs(title = "Employee Attrition by Education Field", x="Education Field", y="Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)")), vjust = -0.5, hjust = 0.5)
+
+grid.arrange(education_field_dist, attrition_by_education_field, ncol=2)
+```
+*Inference:*
+1. Most of the employees are either from Life Science(606) or Medical(464) education fields.
+2. Very few of the employees are from Human Resources(27) education field.
+3. Education Fields like Human Resources(25.9%), Marketing(22%), Technical(24.2%) are having very high attrition rates.
+
+*10. Analyzing employee Attrition by Environment Satisfaction*
+```{r}
+# Visualization to show total employees by job satisfaction
+employee_satisfaction_count <- data %>% count(EnvironmentSatisfaction)
+
+employee_satisfaction_dist <- ggplot(data=employee_satisfaction_count, aes(x="", y=n, fill=EnvironmentSatisfaction)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  theme_minimal() +
+  labs(title = "Employees by Environment Satisfaction") +
+  scale_fill_manual(values = c("#FFA07A", "#D4A1E7", "#FFC0CB","#87CEFA")) +
+  geom_label(aes(label = paste0(n)), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# Visualization to show attrition by environment satisfaction
+environment_satisfaction_att_count <- attrition_data %>% count(EnvironmentSatisfaction)
+
+merged_data <- data.frame(
+  EnvironmentSatisfaction = employee_satisfaction_count$EnvironmentSatisfaction,
+  Total_Employees = employee_satisfaction_count$n,
+  Left = environment_satisfaction_att_count$n,
+  Attrition_Rate =round((environment_satisfaction_att_count$n/employee_satisfaction_count$n) *100, 1)
+)
+
+attrition_by_environment_sat <- ggplot(data=merged_data, aes(x=EnvironmentSatisfaction, y=Attrition_Rate, fill=EnvironmentSatisfaction)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition Rate by Environment Satisfaction", x="Environment Satisfaction", y="Count") +
+  geom_text(aes(label = paste0(Attrition_Rate)), vjust = -0.5, hjust = 0.5) +
+  scale_fill_manual(values = c("#FFA07A", "#D4A1E7", "#FFC0CB","#87CEFA"))
+
+grid.arrange(employee_satisfaction_dist, attrition_by_environment_sat, ncol=2)
+```
+*Inference:*
+1. Most of the emplyees have rated the organization environment satisfaction High & Very High.
+2. Though the environment satisfaction is high, there is a very high attrition rate in this environment.
+3. Attrition Rate increases with lower Environment Satisfaction.
+
+*11. Analyzing Employee Attrition by Job Roles*
+```{r}
+# Visualization to show total employees by Job Role
+job_role_count <- data %>% count(JobRole)
+
+job_role_dist <- ggplot(data=job_role_count, aes(x=reorder(JobRole, -n), y=n, fill=JobRole)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title = "Employees by Job Role", x="Job Role", y="Count") +
+  geom_text(aes(label=paste0(n)), vjust = -0.5, hjust = 0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(job_role_dist, ncol=1)
+```
+```{r}
+# Visualization to show attrition by job role
+
+job_role_att_count <- attrition_data %>% count(JobRole)
+
+merged_data <- data.frame(
+  JobRole = job_role_count$JobRole,
+  TotalEmployees = job_role_count$n,
+  Left = job_role_att_count$n,
+  Attrition_Rate = round((job_role_att_count$n/job_role_count$n)*100, 1)
+)
+
+attrition_by_job_role <- ggplot(data=merged_data, aes(x=fct_reorder(JobRole, Left, .desc = TRUE), y=Left, fill = JobRole)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Emplopyee Attrition by Job Role", x="Job Role", y="Count") +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)")), vjust=-0.5, hjust=0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(attrition_by_job_role, ncol=1)
+```
+*Inference:*
+1. Most employees are working as Sales Executives, Research Scientist, and Laboratory Technician in this organization.
+2. The highest attrition rates are among Laboratory Technicians, Sales Representatives, sales Executives, Research Scientists, and HUman Resources. They have attrition rates over 10%.
+
+*12. Analyzing employee Attrition by Job Level*
+```{r}
+# Visualization to show Total Employees by Job Level
+
+job_level_count <- data %>% count(JobLevel)
+
+job_level_dist <- ggplot(data=job_level_count, aes(x="", y=n, fill=JobLevel)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start = 0) +
+  labs(title = "Employees by Job Level") +
+  geom_label(aes(label = paste0(n)), 
+             position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# Visualization to show employee attrition by job level
+job_level_att_count <- attrition_data %>% count(JobLevel)
+
+merged_data <-  data.frame(
+  JobLevel = job_level_count$JobLevel,
+  TotalEmployees = job_level_count$n,
+  Left = job_level_att_count$n,
+  Attrition_Rate = round((job_level_att_count$n/job_level_count$n)*100, 1)
+)
+
+attrition_by_job_level <- ggplot(data=merged_data, aes(x=JobLevel, y=Left, fill=JobLevel)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Employee Attrition by Job Level", x="Job Level", y="Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, ")")), vjust=-0.5, hjust=0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+grid.arrange(job_level_dist, attrition_by_job_level, ncol=2)
+```
+*Inference:*
+1. Most of the employees in the organization are at an Entry Level or Junior Level.
+2. The Highest attrition rate is observed in the entry level.
+3. As the level inscreases the attrition rate decreases.
+
+*13. Analyzing Employee Attrition by Job Satisfaction*
+```{r}
+# Visualization to show total employees by job satisfaction
+job_satisfaction_count <- data %>% count(JobSatisfaction)
+
+job_satisfaction_dist <- ggplot(data=job_satisfaction_count, aes(x="", y=n, fill=JobSatisfaction)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start = 0) +
+  theme_minimal() +
+  labs(title="Employees by Job Satisfaction") +
+  geom_label(aes(label=paste0(n)), position = position_stack(vjust = 0.5), 
+             show.legend = FALSE)
+
+# Visualization to show attrition rate by Job Satisfaction
+job_satisfaction_att_count <- attrition_data %>% count(JobSatisfaction)
+
+merged_data <- data.frame(
+  JobSatisfaction = job_satisfaction_count$JobSatisfaction,
+  TotalEmployees = job_satisfaction_count$n,
+  Left = job_satisfaction_att_count$n,
+  Attrition_Rate = round((job_satisfaction_att_count$n/job_satisfaction_count$n)*100, 1)
+)
+
+attrition_by_job_satisfaction <- ggplot(data=merged_data, aes(x=JobSatisfaction, y=Left, fill=JobSatisfaction)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition by Employee Job Satisfaction", x="Job Satisfaction", y="Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)")), vjust=-0.5, hjust=0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+grid.arrange(job_satisfaction_dist, attrition_by_job_satisfaction, ncol=2)
+```
+*Inference:*
+1. Most of the employees have rated their job satisfaction as High or Very High.
+2. Employees who rated ther job satisfaction low are mostly leaving the organization at high attrition rate (22.8%).
+3. All the categories in the job satisfaction are having high attrition rates.
+
+*14. Analyzing Employee Attrition by Marital Status*
+```{r}
+# Visualization of Total Employees by Marital Status
+marital_status_count <- data %>% count(MaritalStatus)
+
+marital_status_dist <- ggplot(data=marital_status_count, aes(x="", y=n, fill=MaritalStatus)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start=0) +
+  theme_minimal() +
+  labs(title="Employees by Marital Status") +
+  geom_label(aes(label=paste0(n)), position = position_stack(vjust=0.5), show.legend = FALSE)
+
+# Visualization to show Attrition Rate by Marital Status
+marital_status_att_count <- attrition_data %>% count(MaritalStatus)
+
+merged_data <- data.frame(
+  MaritalStatus = marital_status_count$MaritalStatus,
+  Total_Employees = marital_status_count$n,
+  Left = marital_status_att_count$n,
+  Attrition_Rate = round((marital_status_att_count$n/marital_status_count$n)*100, 1)
+)
+
+attrition_by_marital_status <- ggplot(data=merged_data, aes(x=MaritalStatus, y=Left, fill=MaritalStatus)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition by Employee Marital Status", x="Marital Status", y="Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)")), vjust=-0.5, hjust=0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+
+grid.arrange(marital_status_dist, attrition_by_marital_status ,ncol=2)
+```
+*Inference:*
+1. Most of the employees are Married in the organization.
+2. The attrition rate is very high among single employees.
+3. The attrition rate is lowest among divorced employees.
+
+*15. Analyzing Employee Attrition by Monthly Income*
+```{r}
+# Visualization to show Employee Distribution by Monthly Income
+monthly_income_plot <- ggplot(data, aes(x = MonthlyIncome, fill = Attrition)) +
+  geom_histogram(alpha = 0.7, position = "identity", bins = 20, color = "white") +
+  geom_density(alpha = 0.2, aes(color = Attrition)) +
+  labs(title = "Employee Attrition by Monthly Income", x = "Monthly Income", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#6faea4", "#11264e"))
+
+# Visualization to show Employee Attrition by Monthly Income
+attrition_by_monthly_income <- ggplot(data, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
+  geom_boxplot(notch = TRUE) +  # Add notches for better comparison between groups
+  labs(title = "Employee Attrition by Monthly Income", x = "Attrition", y = "Monthly Income") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#D4A1E7", "#6faea4")) +
+  theme(plot.title = element_text(hjust = 0.5))  # Center title horizontally
+  
+
+grid.arrange(monthly_income_plot, attrition_by_monthly_income, ncol=2)
+```
+```{r}
+mean_monthly_income <- data %>% 
+  select(Attrition, MonthlyIncome) %>%
+  group_by(Attrition) %>% 
+  summarize(mean_income = mean(MonthlyIncome))
+
+mean_monthly_income
+
+```
+*Inference*
+1. Most of the employees are getting paid less tham 10000 in the organization.
+2. The average monthly income of employee who have left is comparatively low to employees who are still working.
+3. As the Mothly Income increases the attrition decreases.
+
+*16. Analyzing Employee Attrition by Number of Companies Worked*
+```{r}
+data %>%
+  select(NumCompaniesWorked) %>% 
+  summary()
+```
+
+```{r}
+number_companies_worked_count <- data %>% count(NumCompaniesWorked)
+
+number_companies_worked_count
+```
+
+```{r}
+# Visualization to show employee number of companies worked distribution
+number_of_companies_dist <-  ggplot(number_companies_worked_count, aes(x = factor(NumCompaniesWorked), y = n, fill=factor(NumCompaniesWorked))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Distribution of No. of Companies Worked", x = "Number of Companies Worked", y = "Count", fill="No. of Companies") +
+  theme_minimal() +
+  geom_text(aes(label = paste0(n), vjust = -.5, hjust=0.5))
+
+# Calculate the number of employees who left and stayed for each number of companies worked
+attrition_by_num_companies <- data %>%
+  group_by(NumCompaniesWorked, Attrition) %>%
+  summarize(count = n())
+
+# Create the stacked bar chart
+attrition_by_number_of_companies <- ggplot(attrition_by_num_companies, aes(x = factor(NumCompaniesWorked), y = count, fill = Attrition)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(count), vjust=-0.5, hjust=0.5), position = position_stack(vjust = 1.0, reverse=FALSE)) +
+  scale_x_discrete(labels = unique(attrition_by_num_companies$NumCompaniesWorked)) +
+  labs(title = "Attrition by No. of Companies Worked", x = "Number of Companies Worked", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#6faea4", "#11264e"), labels = c("Stayed", "Left"))
+
+grid.arrange(number_of_companies_dist, attrition_by_number_of_companies, ncol=2)
+```
+```{r}
+# Visualization to show just the attrition rates by NUmber of Companies Worked
+number_companies_worked_att_count <- attrition_data %>% count(NumCompaniesWorked)
+
+merged_data <- data.frame(
+  NumCompaniesWorked = number_companies_worked_count$NumCompaniesWorked,
+  TotalEmployees = number_companies_worked_count$n,
+  Left = number_companies_worked_att_count$n,
+  Attrition_Rate = round((number_companies_worked_att_count$n/number_companies_worked_count$n)*100, 1)
+)
+
+attrition_rate_by_no_companies <- ggplot(data=merged_data, aes(x=factor(NumCompaniesWorked), y=Attrition_Rate, fill=factor(NumCompaniesWorked))) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by No. of Companies", x="No. of Companies", y="Attrition Rate") +
+  geom_text(aes(label=paste0(Attrition_Rate, "%"), vjust=-0.5, hjust=0.5))
+
+grid.arrange(attrition_rate_by_no_companies, ncol=1)
+```
+
+
+*Inference:*
+1. Most of the employees have worked for less than 2 companies.
+2. There's a high attrition rate among employees who have worked for 1 company.
+3. However, there appears to be a rise in attrition rates among employees who have worked for 5-7 companies.
+
+*17. Analyzing Employee Attrition by Over Time*
+```{r}
+# Visualization to show Total Employees by Overtime.
+overtime_count <- data %>% count(OverTime)
+
+overtime_dist <- ggplot(data=overtime_count, aes(x="", y=n, fill=OverTime)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  coord_polar("y", start=0) +
+  labs(title="Employees by OverTime") +
+  scale_fill_manual(values=c("#ffb563","#FFC0CB")) +
+  geom_label(aes(label=paste0(OverTime,"\n",round(n/sum(n)*100, 1), "%")), position = position_stack(vjust=0.5, reverse=FALSE), show.legend = FALSE)
+
+# Visualization to show Attrition Rate by Overtime
+overtime_att_count <- attrition_data %>% count(OverTime)
+
+merged_data <- data.frame(
+  OverTime = overtime_count$OverTime,
+  TotalEmployees = overtime_count$n,
+  Left = overtime_att_count$n,
+  Attrition_Rate = round((overtime_att_count$n/overtime_count$n)*100, 1)
+)
+
+attrition_by_overtime <- ggplot(data=merged_data, aes(x=OverTime, y=Left, fill=OverTime)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition by OverTime", x="OverTime", y="Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values = c("#D4A1E7","#E7A1A1"))
+
+grid.arrange(overtime_dist, attrition_by_overtime, ncol=2)
+```
+*Inference:*
+1. Most of the employees in the organization don't work overtime.
+2. Evidently, the attrition rate is higher among employees who work overtime. However, the faeture OverTime has a very high class imbalance, due to which we can't make any meaningful insights.
+
+*18. Analyzing Employee Attrition by Percentage Salary Hike*
+```{r}
+salary_hike_dist <- ggplot(data, aes(x = factor(PercentSalaryHike), fill = Attrition)) +
+  geom_bar(stat = "count", position = "dodge") +
+  labs(title = "Employee Attrition By Percent Salary Hike", 
+       x = "Percent Salary Hike", 
+       y = "Count", 
+       fontweight = "bold", 
+       title.size = 20, 
+       title.x = 0.5, 
+       title.y = 1.0) +
+  theme_minimal() +
+  scale_fill_manual(values = c("#1d7874", "#AC1F29"), labels = c("Stayed", "Left")) +
+  geom_text(aes(label = ..count..), stat = "count", position = position_dodge(width = 1), vjust = -0.25)
+
+grid.arrange(salary_hike_dist, ncol=1)
+```
+```{r}
+# Attrition Rate by percent salary hike
+# Calculate attrition rate for each salary hike
+attrition_rate <- data %>% 
+  group_by(PercentSalaryHike) %>% 
+  summarize(
+    Total = n(),
+    Left = sum(Attrition == "Yes"),
+    Attrition_Rate = (Left / Total) * 100
+  )
+
+# Create a bar plot
+attrition_rate_by_salaryhike <-  ggplot(attrition_rate, aes(x =factor( PercentSalaryHike), y = Attrition_Rate, fill = factor(PercentSalaryHike))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(Attrition_Rate, 1), "%"), vjust = -0.5), size = 3) +
+  labs(title = "Attrition Rate by Percent Salary Hike", x = "Percent Salary Hike", y = "Attrition Rate (%)", fill="Salary Hike %") +
+  theme_minimal()
+
+grid.arrange(attrition_rate_by_salaryhike, ncol=1)
+```
+
+*Inference:*
+1. Very few employees are getting a high percent salary hike.
+2. Higher salary hikes are associated with lower attrition rates. However, the data for salary hikes above 20% is limited, making it difficult to draw definitive conclusions.
+
+*19. Analyzing Employee Attrition by Performance Rating*
+```{r}
+# Visualization to show total employees by performance rating
+performance_rating_count <- data %>% count(PerformanceRating)
+
+performance_rating_dist <- ggplot(data=performance_rating_count, aes(x="", y=n, fill=PerformanceRating)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start=0) +
+  theme_minimal() +
+  labs(title="Employees by Performance Rating") +
+  geom_text(aes(label=paste0(PerformanceRating, "\n", round((n/sum(n))*100, 1), "%")), position = position_stack(vjust=0.5), show.legend = FALSE)
+
+# Visualization to show attrition rate by Performance Rating
+performance_rating_att_count <- attrition_data %>% count(PerformanceRating)
+
+merged_data <- data.frame(
+  PerformanceRating = performance_rating_count$PerformanceRating,
+  TotalEmployees = performance_rating_count$n,
+  Left = performance_rating_att_count$n,
+  Attrition_Rate = round((performance_rating_att_count$n/performance_rating_count$n)*100, 1)
+)
+
+attrition_rate_by_performance <- ggplot(data=merged_data, aes(x=PerformanceRating, y=Left, fill=PerformanceRating)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition by Performance Rating", x="Performance Rating", y="Attrition Count") +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values = c("#D4A1E7","#E7A1A1"))
+
+grid.arrange(performance_rating_dist, attrition_rate_by_performance, ncol=2)
+```
+*Inference:*
+1. Most of the employees have excellent performance ratings.
+2. However, the categories have similar attrition rates.
+3. Therefore, we can't generate meaningful insights from Performance ratings attribute.
+
+*20. Analyzing Employee Attrition by Relationship Satisfaction*
+```{r}
+# Visualization to show total employees by relationship satisfaction
+relationship_satisfaction_count <- data %>% count(RelationshipSatisfaction)
+
+relationship_satisfaction_dist <- ggplot(data=relationship_satisfaction_count, aes(x="", y=n, fill=RelationshipSatisfaction)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start=0) +
+  theme_minimal() +
+  labs(title="Employees by Performance Satisfaction") +
+  geom_text(aes(label=paste0( RelationshipSatisfaction, "\n", round((n/sum(n))*100, 1), "%")), position = position_stack(vjust = 0.5), show.legend = FALSE) +
+  scale_fill_manual(values=c('#6495ED', '#87CEEB', '#00BFFF', '#1E90FF')) +
+  theme(legend.position = "none")
+  
+
+# Visualization to show Attrition Rate by relationship satisfaction
+relationship_satisfaction_att_count <- attrition_data %>% count(RelationshipSatisfaction)
+
+merged_data = data.frame(
+  RelationshipSatisfaction = relationship_satisfaction_count$RelationshipSatisfaction,
+  TotalEmployees = relationship_satisfaction_count$n,
+  Left = relationship_satisfaction_att_count$n,
+  Attrition_Rate = round((relationship_satisfaction_att_count$n / relationship_satisfaction_count$n)*100, 1)
+)
+
+attrition_by_relationship_satisfaction <- ggplot(data=merged_data, aes(x=RelationshipSatisfaction, y=Left, fill=RelationshipSatisfaction)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title = "Attrition by Relationship Satisfaction", x="Relationship Satisfaction", y="Attrition Count") +
+  scale_fill_manual(values = c('#6495ED', '#87CEEB', '#00BFFF', '#1E90FF')) +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(relationship_satisfaction_dist, attrition_by_relationship_satisfaction, ncol=2)
+```
+*Inference:*
+1. Most of the employees have high or very high relationship satisfaction.
+2. Although the relationship satisfaction is high, there's a high attrition rate.
+3. All levels in this attribute have high attrition rates.
+
+*21. Analyzing Employee Attrition by Work Life balance*
+```{r}
+# visualization to show Total Employees by Work Life Balance
+worklife_balance_count <- data %>% count(WorkLifeBalance)
+
+worklife_balance_dist <- ggplot(data=worklife_balance_count, aes(x="", y=n, fill=WorkLifeBalance)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  coord_polar("y", start=0) +
+  labs(title="Employees by Worklife Balance") +
+  geom_text(aes(label=paste0(WorkLifeBalance, "\n",round((n/sum(n))*100, 1)), x=1.6), position = position_stack(vjust=0.5), show.legend = FALSE, size = 3)
+
+# Visualization to show attrition by worklife balance
+worklife_balance_att_count <- attrition_data %>% count(WorkLifeBalance)
+
+merged_data <- data.frame(
+  WorkLifeBalance = worklife_balance_count$WorkLifeBalance,
+  TotalEmployees = worklife_balance_count$n,
+  Left = worklife_balance_att_count$n,
+  Attrition_Rate = round((worklife_balance_att_count$n / worklife_balance_count$n)*100, 1)
+)
+
+attrition_by_worklife_balance <- ggplot(data=merged_data, aes(x=WorkLifeBalance, y=Left, fill=WorkLifeBalance)) +
+  geom_bar(stat="identity") +
+  theme_minimal()+
+  labs(title="Attrition by Work Life Balance", x="Work Life Balance", y="Attrition Count") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, ")"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values=c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1")) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+grid.arrange(worklife_balance_dist, attrition_by_worklife_balance, ncol=2)
+```
+*Inference:*
+1. Over 60% of employees have a "Better" work life balance.
+2. Employees with "Bad" worklife balance have a very high attrition rate.
+3. However, the other categories also have very high attrition rates.
+
+*22. Analyzing Employee Attrition by Total Working Years*
+```{r}
+# Cut the TotalWorkingYears into groups
+data$TotalWorkingYearsGroup <- cut(data$TotalWorkingYears, 
+                                    breaks = c(-Inf, 5, 10, 20, Inf), 
+                                    labels = c("0-5 years", "5-10 years", "10-20 years", "20+ years"))
+
+data %>% count(TotalWorkingYearsGroup)
+```
+```{r}
+# Visualization to show total employees by total working years group
+workyears_count <- data %>% count(TotalWorkingYearsGroup)
+
+workyears_dist <- ggplot(data=workyears_count, aes(x="", y=n, fill=TotalWorkingYearsGroup)) +
+  geom_bar(stat="identity") +
+  coord_polar("y", start=0) +
+  labs(title="Employees by Years Worked") +
+  geom_text(aes(label=paste0(round((n/sum(n))*100, 1), "%"), x=1.6), position = position_stack(vjust=0.5), show.legend = FALSE) +
+  scale_fill_manual(values=c('#E84040', '#E96060', '#E88181', '#E7A1A1')) +
+  theme_minimal()
+    
+# Visualization to show Attrition Rate by TotalWorkingYears Groups
+attrition_data <- data %>%
+  filter(Attrition == "Yes")
+  
+workingyears_att_count <- attrition_data %>% count(TotalWorkingYearsGroup)
+
+merged_data <- data.frame(
+  TotalWorkingYearsGroup = workyears_count$TotalWorkingYearsGroup,
+  TotalEmployees = workyears_count$n,
+  Left = workingyears_att_count$n,
+  Attrition_Rate = round((workingyears_att_count$n / workyears_count$n)*100, 1)
+)
+
+attrition_by_workyears <- ggplot(data=merged_data, aes(x=TotalWorkingYearsGroup, y=Attrition_Rate, fill=TotalWorkingYearsGroup)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title="Attrition by Total Years Worked", x="Total Years Worked", y="Attrition Rate") +
+  geom_text(aes(label=paste0(Attrition_Rate, "%"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values = c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(workyears_dist, attrition_by_workyears, ncol=2)
+```
+*Inference:*
+1. Most of the employees have a total of 5-10 years of experience. But their Attrition Rate is also very high.
+2. Employees with less than 10 years of working experience tend to have a high attrition rate.
+
+*23. Analyzing Employee Attrition by Years at Company*
+```{r}
+# Visualization to show total employees by Years At Company
+ggplot(data, aes(x = YearsAtCompany)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = after_stat(density)), color = "red") +
+  labs(title = "Distribution of Years at Company", x = "Years at Company", y = "Density") +
+  theme_minimal()
+```
+```{r}
+data %>% count(YearsAtCompany)
+```
+                                                                                                                            
+
+```{r}
+# employee years at company by groups
+data$YearsAtCompanyGroups <- cut(data$YearsAtCompany, breaks = c(-Inf, 1, 5, 10, Inf), labels = c('0-1 years', '2-5 years', '5-10 years', "10+ years"))
+
+
+# data %>% count(YearsAtCompanyGroups)
+
+years_at_company_count <- data %>% count(YearsAtCompanyGroups)
+
+years_at_company_dist <- ggplot(data=years_at_company_count, aes(x="", y=n, fill=YearsAtCompanyGroups)) +
+  geom_bar(stat="identity") +
+  coord_polar(start=0, "y") +   
+  labs(title="Employees by Years At Company", fill="Years") +
+  geom_text(aes(label=paste0(round((n/sum(n))*100, 1), "%")), position = position_stack(vjust = 0.5), size = 3) +
+  geom_text(aes(label=paste0(YearsAtCompanyGroups),x=1.8), position = position_stack(vjust = 0.5)) +
+  scale_fill_manual(values=c('#FFB300', '#FFC300', '#FFD700', '#FFFF00'))
+
+# Visualization to show attrition by YearsAtCompanyGroups
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+years_at_company_att_count <- attrition_data %>% count(YearsAtCompanyGroups)
+
+merged_data <- data.frame(
+  YearsAtCompanyGroups = years_at_company_count$YearsAtCompanyGroups,
+  TotalEmployees = years_at_company_count$n,
+  Left = years_at_company_att_count$n,
+  Attrition_Rate = round((years_at_company_att_count$n / years_at_company_count$n)*100, 1)
+)
+
+attrition_by_years_at_company <- ggplot(data=merged_data, aes(x=YearsAtCompanyGroups, y=Left, fill=YearsAtCompanyGroups)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Attrition by Years At Company", x="Years at Company", y="Attrition Count", fill="Years") +
+  geom_text(aes(label = paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values = c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1")) +
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+
+grid.arrange(years_at_company_dist, attrition_by_years_at_company, ncol=2  )
+```
+*Inference:*
+1. Most employees have worked for 2 to 10 years at the company.
+2. Very few of the employees have been working for less than a year or more than 10 years.
+3. Employees who have worked for 2-5 years have a very high attrition rate.
+4. Employees who have worked for over 10 years have a very low attrition rate.
+
+*24. Analyzing Employee Attrition by Years in Current Role*
+```{r}
+# Visualization to show Years in Current Role
+
+ggplot(data, aes(x = YearsInCurrentRole)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = after_stat(density)), color = "red") +
+  labs(title = "Distribution of Years in Current Role", x = "Years in Current Role", y = "Density") +
+  theme_minimal()
+```
+```{r}
+# Creating bins
+data$YearsInCurrentRoleGroups <- cut(data$YearsInCurrentRole, breaks = c(-Inf, 1, 5, 10, 29), labels=c('0-1 years', '2-5 years', '5-10 years', "10+ years"))
+
+data %>% count(YearsInCurrentRoleGroups)
+```
+```{r}
+years_in_role_count <- data %>% count(YearsInCurrentRoleGroups)
+
+years_in_role_dist <- ggplot(data=years_in_role_count, aes(x="", y=n, fill=YearsInCurrentRoleGroups)) +
+  geom_bar(stat="identity") +
+  coord_polar(start = 0, "y") +
+  labs(title="Employees by Years in Current Role", fill="Years") +
+  geom_text(aes(label=paste0(round((n/sum(n))*100, 1), "%"), x=1.25), position=position_stack(vjust=0.5), size=3) +
+  scale_fill_manual(values = c('#6495ED', '#87CEEB', '#00BFFF', '#1E90FF')) +
+  geom_text(aes(label=paste0(YearsInCurrentRoleGroups), x=1.9), position=position_stack(vjust=0.5))
+
+# Visualization to show attrition rate by year in current role
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+years_in_role_att_count <- attrition_data %>% count(YearsInCurrentRoleGroups)
+
+merged_data = data.frame(
+  YearsInCurrentRoleGroups = years_in_role_count$YearsInCurrentRoleGroups,
+  TotalEmployees = years_in_role_count$n,
+  Left = years_in_role_att_count$n,
+  Attrition_Rate = round((years_in_role_att_count$n / years_in_role_count$n)*100, 1)
+)
+
+attrition_by_years_in_role <- ggplot(data=merged_data, aes(x=YearsInCurrentRoleGroups, y=Left, fill=YearsInCurrentRoleGroups)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(title = "Attrition by Years in Current Role", x="Years in Current Role", y="Attrition Count", fill="Years") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5), size = 3) +
+  scale_fill_manual(values=c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(years_in_role_dist, attrition_by_years_in_role, ncol=2)
+```
+*Inference:*
+1. Most employees have worked in the same role for 2 to 10 years.
+2. Very few employees have worked for less than 1 year or more than 10 years in the same role.
+3. Attrition rate is very high for employees who have worked in the same role for 0-1 years(27.9%) and 2-5 years(15.5%).
+
+*25. Analyzing Employee Attrition by Years Since Last Promotion.*
+```{r}
+# visualization to show employees by Years Since Last Promotion
+ggplot(data, aes(x = YearsSinceLastPromotion)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = after_stat(density)), color = "red") +
+  labs(title = "Distribution of Years Since Last Promotion", x = "Years Since Last Promotion", y = "Density") +
+  theme_minimal()
+
+```
+```{r}
+# creating bins
+data$YearsSinceLastPromotionGroups <- cut(data$YearsSinceLastPromotion, breaks=c(-Inf, 1, 5, 10, Inf), labels=c('0-1 years', '2-5 years', '5-10 years', "10+ years"))
+
+data %>% count(YearsSinceLastPromotionGroups)
+```
+
+```{r}
+# visualization to show employees by Years Since Last Promotion
+years_since_promotion_count <- data %>% count(YearsSinceLastPromotionGroups)
+
+years_since_promotion_dist <- ggplot(data=years_since_promotion_count, aes(x="", y=n, fill=YearsSinceLastPromotionGroups)) +
+  geom_bar(stat="identity") +
+  coord_polar(start=0, "y") +
+  theme_minimal() +
+  labs(title="Employees by Years Since Last Promotion", fill="Years") +
+  geom_text(aes(label=paste0(round((n/sum(n))*100, 1), "%"), x=1.23), position = position_stack(vjust=0.5), size = 3) +
+  geom_text(aes(label=paste0(YearsSinceLastPromotionGroups), x=1.8), position = position_stack(vjust=0.5)) +
+  scale_fill_manual(values=c('#FF6D8C', '#FF8C94', '#FFAC9B', '#FFCBA4'))
+
+grid.arrange(years_since_promotion_dist, ncol=1)
+```
+```{r}
+# Visualization to show Attrition by Years Since Last Promotion
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+years_since_promotion_att_count <- attrition_data %>% count(YearsSinceLastPromotionGroups)
+
+merged_data <- data.frame(
+  YearsSinceLastPromotionGroups = years_since_promotion_count$YearsSinceLastPromotionGroups,
+  TotalEmployees = years_since_promotion_count$n,
+  Left = years_since_promotion_att_count$n,
+  Attrition_Rate = round((years_since_promotion_att_count$n / years_since_promotion_count$n)*100, 1)
+)
+
+attrition_by_last_promotion <- ggplot(data=merged_data, aes(x=YearsSinceLastPromotionGroups, y=Left, fill=YearsSinceLastPromotionGroups)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title="Attrition by Years Since Last Promotion", x="Years Since Last Promotion", y="Attrition Count", fill="Years") +
+  geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values=c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1")) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+grid.arrange(attrition_by_last_promotion, ncol=1)
+```
+*Inference:*
+1. Around 36% of the employees have not been promoted for the past 2 to 5 years.
+2. Almost 8% of the employees have not been promoted for the past 10 years.
+3. All employee categories exhibit attrition rates exceeding 10%, with the highest rates observed among those not promoted for 5-10 years.
+
+*26. Analyzing employee Attrition by Years with Current Manager*
+```{r}
+ggplot(data, aes(x = YearsWithCurrManager)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = after_stat(density)), color = "red") +
+  labs(title = "Distribution of Years With Current Manager", x = "Years with Current Manager", y = "Density") +
+  theme_minimal()
+```
+```{r}
+# Creating bins
+data$YearsWithCurrManagerGroup <- cut(data$YearsWithCurrManager, breaks = c(-Inf, 1, 5, 10, Inf), labels = c('0-1 years', '2-5 years', '5-10 years', "10+ years"))
+
+data %>% count(YearsWithCurrManagerGroup)
+```
+```{r}
+# Visualization to show employees by Years With Current Manager
+years_current_manager_count <- data %>% count(YearsWithCurrManagerGroup)
+
+years_current_manager_dist <- ggplot(data=years_current_manager_count, aes(x="", y=n, fill=YearsWithCurrManagerGroup)) +
+  geom_bar(stat="identity") +
+  coord_polar(start=0, "y") +
+  theme_minimal() +
+  labs(title="Employees by Years With Current Manager", fill="Years") +
+  geom_text(aes(label=paste0(round((n/sum(n))*100, 1),"%"), x=1.2),
+                                                                position=position_stack(vjust=0.5)) +
+  scale_fill_manual(values = c('#FF8000', '#FF9933', '#FFB366', '#FFCC99')) +
+  geom_text(aes(label=paste0(YearsWithCurrManagerGroup), x=1.8),
+                                                            position=position_stack(vjust=0.5))
+
+grid.arrange(years_current_manager_dist, ncol=)
+```                                                        
+```{r}
+# Visualization to show Attrition Rate by YearsWithCurrentManager
+attrition_data <- data %>% filter(Attrition == "Yes")
+
+years_current_manager_att_count <- attrition_data %>% count(YearsWithCurrManagerGroup)
+
+merged_data = data.frame(
+  YearsWithCurrManagerGroup = years_current_manager_count$YearsWithCurrManagerGroup,
+  TotalEmployees = years_current_manager_count$n,
+  Left = years_current_manager_att_count$n,
+  Attrition_Rate = round((years_current_manager_att_count$n / years_current_manager_count$n)*100, 1)
+)
+attrition_by_years_current_manager <- ggplot(data=merged_data, aes(x=YearsWithCurrManagerGroup, y=Left, fill=YearsWithCurrManagerGroup)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Attrition by Years With Current Manager", x="Years With Current Manager", y="Attrition Count") +
+geom_text(aes(label=paste0(Left, " (", Attrition_Rate, "%)"), vjust=-0.5, hjust=0.5)) +
+  scale_fill_manual(values=c("#11264e","#6faea4","#FEE08B","#D4A1E7","#E7A1A1"))
+
+grid.arrange(attrition_by_years_current_manager, ncol=1)
+```
+*Inference:*
+1. Almost 42% of employees have worked for 2-5 years with the same manager.
+2. Almost 31% of employees has worked for 5-10 years with the same manager.
+3. Employee who has worked for 10+ year with the same manager have very low attrition rate.
+4. Other Categories have high attrition rate.
+
+# Statistical Analysis#
+##1. ANOVA Test: Test the Numerical Features Importance##
+
+* Anova test is used to Analyzing the impact of different numerical features on a response categorical feature.
+* Anova test returns two statistical values f_score and p_value.
+
+*NOTE:*
+1. A larger F-score indicates a stronger association between the independent variable(s) and the dependent variable.
+2. If the p-value is below your chosen significance level (e.g., p less than 0.05),than we can reject our null hypothesis.
+
+```{r}
+# Number of columns
+df <- df %>% drop_na()
+num_cols <- ncol(df)
+```
+
+```{r}
+new_df <- df %>%
+  mutate(Attrition = ifelse(Attrition == "Yes", 1, 0))
+```
+
+```{r}
+head(new_df)
+```
+
+```{r}
+library(tidyverse)
+
+fit <- aov(DailyRate ~ Attrition, data=new_df)
+
+
+```
+
+
